@@ -14,12 +14,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const { isAuthenticated, isLoading } = useAuth();
 
-  React.useEffect(() => {
-    // Nếu đã đăng nhập thì chuyển hướng về trang chủ
-    if (!isLoading && isAuthenticated()) {
-      router.push('/');
-    }
-  }, [isLoading, isAuthenticated, router]);
+  // Đã xóa useEffect redirect khi đã đăng nhập để tránh vòng lặp
 
   if (isLoading) {
     return (
