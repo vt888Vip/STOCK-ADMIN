@@ -79,33 +79,36 @@ export default function LoginPage() {
             localStorage.setItem('authToken', loginResult.token);
             document.cookie = `token=${loginResult.token}; path=/; max-age=604800`;
           }
-          setError("Đăng nhập thành công! Đang chuyển hướng...");
-
-          // Auto-dismiss success message after 1 second
-          setTimeout(() => {
-            setError("");
-          }, 1000);
+          setError("Đăng nhập thành công! Đang kiểm tra quyền...");
 
           // Lấy lại thông tin user để kiểm tra role
-          setTimeout(async () => {
-            try {
-              const res = await fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (data?.user?.role === 'admin') {
-                  window.location.replace('/admin');
-                } else {
-                  window.location.replace(callbackUrl);
-                }
+          try {
+            const res = await fetch('/api/auth/me', {
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.user?.role === 'admin') {
+                window.location.replace('/admin');
               } else {
-                window.location.replace(callbackUrl);
+                // Nếu không phải admin, xóa token và báo lỗi
+                localStorage.removeItem('token');
+                localStorage.removeItem('authToken');
+                document.cookie = 'token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+                setError('Chỉ tài khoản admin mới được phép đăng nhập!');
+                setIsLoading(false);
+                return;
               }
-            } catch (e) {
-              window.location.replace(callbackUrl);
+            } else {
+              setError('Không xác thực được tài khoản. Vui lòng thử lại.');
+              setIsLoading(false);
+              return;
             }
-          }, 1000);
+          } catch (e) {
+            setError('Có lỗi khi kiểm tra quyền tài khoản. Vui lòng thử lại.');
+            setIsLoading(false);
+            return;
+          }
         } catch (err) {
           console.error('Error saving to localStorage:', err);
         }
