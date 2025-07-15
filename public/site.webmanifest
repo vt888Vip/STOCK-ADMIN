@@ -1,0 +1,9 @@
+{
+  "name": "BẢN FULL",
+  "short_name": "FULLFULL",
+  "description": "THANH TOÁN XONG - XÓA CHỮ THỪA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000"
+}
