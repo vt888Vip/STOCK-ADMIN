@@ -612,6 +612,14 @@ export default function AdminDashboard() {
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span className="text-sm font-medium text-gray-700">Xin chào, {user?.username}</span>
               </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => router.push('/admin/settings')}
+                className="border-gray-200 text-gray-600 hover:bg-gray-100"
+              >
+                  <Settings className="h-4 w-4" />
+              </Button>
               <Button 
                 variant="outline" 
                 size="sm" 
