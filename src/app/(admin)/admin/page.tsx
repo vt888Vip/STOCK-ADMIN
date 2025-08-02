@@ -30,7 +30,8 @@ import {
   Edit,
   Target,
   Search,
-  X
+  X,
+  Key
 } from 'lucide-react';
 import UploadImage from '@/components/UploadImage';
 import { useToast } from '@/components/ui/use-toast';
@@ -73,6 +74,15 @@ export default function AdminDashboard() {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<any>(null);
+  
+  // Password change states
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordUser, setPasswordUser] = useState<any>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showGeneratedPassword, setShowGeneratedPassword] = useState(false);
+  const [generatedPassword, setGeneratedPassword] = useState('');
 
   // Bank management states
   const [editingBank, setEditingBank] = useState<any>(null);
@@ -228,7 +238,11 @@ export default function AdminDashboard() {
       
       if (depositsResponse.ok) {
         const depositsData = await depositsResponse.json();
-        setDeposits(depositsData.deposits || []);
+        if (depositsData.success) {
+          setDeposits(depositsData.deposits || []);
+        } else {
+          console.error('Error loading deposits:', depositsData.message);
+        }
       }
 
       // Load banks
@@ -307,22 +321,24 @@ export default function AdminDashboard() {
         })
       });
 
-      if (response.ok) {
+      const responseData = await response.json();
+      
+      if (response.ok && responseData.success) {
         toast({
           title: 'Thành công',
-          description: 'Đã nạp tiền cho người dùng',
+          description: responseData.message || 'Đã nạp tiền cho người dùng',
         });
         setDepositAmount('');
         setDepositNote('');
         setSelectedUser(null);
         loadData(); // Reload data
       } else {
-        throw new Error('Failed to deposit');
+        throw new Error(responseData.message || 'Failed to deposit');
       }
     } catch (error) {
       toast({
         title: 'Lỗi',
-        description: 'Không thể nạp tiền',
+        description: error instanceof Error ? error.message : 'Không thể nạp tiền',
         variant: 'destructive',
       });
     }
@@ -575,6 +591,102 @@ export default function AdminDashboard() {
         description: 'Không thể xóa người dùng',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Password change functions
+  const generateRandomPassword = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  const handleChangePassword = (user: any) => {
+    setPasswordUser(user);
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowGeneratedPassword(false);
+    setGeneratedPassword('');
+    setShowPasswordModal(true);
+  };
+
+  const handleGeneratePassword = () => {
+    const password = generateRandomPassword();
+    setNewPassword(password);
+    setConfirmPassword(password);
+    setGeneratedPassword(password);
+    setShowGeneratedPassword(true);
+  };
+
+  const confirmChangePassword = async () => {
+    if (!passwordUser) return;
+
+    // Validate passwords
+    if (!newPassword || newPassword.length < 6) {
+      toast({
+        title: 'Lỗi',
+        description: 'Mật khẩu mới phải có ít nhất 6 ký tự',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: 'Lỗi',
+        description: 'Mật khẩu xác nhận không khớp',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+
+    try {
+      const response = await fetch('/api/admin/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ 
+          userId: passwordUser._id,
+          newPassword 
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        toast({
+          title: 'Thành công',
+          description: `Đã đổi mật khẩu cho ${passwordUser.username}. Vui lòng thông báo cho người dùng mật khẩu mới.`,
+        });
+        setShowPasswordModal(false);
+        setPasswordUser(null);
+        setNewPassword('');
+        setConfirmPassword('');
+        setShowGeneratedPassword(false);
+        setGeneratedPassword('');
+      } else {
+        const error = await response.json();
+        toast({
+          title: 'Lỗi',
+          description: error.message || 'Không thể đổi mật khẩu',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error changing password:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể đổi mật khẩu',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -989,8 +1101,18 @@ export default function AdminDashboard() {
                             variant="outline"
                             onClick={() => handleViewUser(user)}
                             className="hover:bg-blue-50 hover:text-blue-600"
+                            title="Xem chi tiết"
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleChangePassword(user)}
+                            className="hover:bg-yellow-50 hover:text-yellow-600"
+                            title="Đổi mật khẩu"
+                          >
+                            <Key className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
@@ -998,6 +1120,7 @@ export default function AdminDashboard() {
                             onClick={() => handleDeleteUser(user)}
                             disabled={user.role === 'admin'}
                             className="hover:bg-red-50"
+                            title="Xóa người dùng"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1836,6 +1959,14 @@ export default function AdminDashboard() {
                 </div>
 
                 <div className="flex justify-end gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => handleChangePassword(editingUser)}
+                    className="bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                  >
+                    <Key className="h-4 w-4 mr-2" />
+                    Đổi mật khẩu
+                  </Button>
                   <Button variant="outline" onClick={() => setShowUserModal(false)}>
                     Hủy
                   </Button>
@@ -1974,6 +2105,113 @@ export default function AdminDashboard() {
                 Hủy
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Change Password Modal */}
+        <Dialog open={showPasswordModal} onOpenChange={setShowPasswordModal}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-yellow-600" />
+                Đổi mật khẩu người dùng
+              </DialogTitle>
+            </DialogHeader>
+            {passwordUser && (
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Người dùng:</strong> {passwordUser.username}
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    Mật khẩu mới sẽ được áp dụng ngay lập tức
+                  </p>
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="newPassword">Mật khẩu mới</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="newPassword"
+                        type="password"
+                        placeholder="Nhập mật khẩu mới (tối thiểu 6 ký tự)"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleGeneratePassword}
+                        className="whitespace-nowrap"
+                      >
+                        Tạo mật khẩu
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  {showGeneratedPassword && (
+                    <div className="p-2 bg-green-50 border border-green-200 rounded">
+                      <p className="text-sm text-green-800">
+                        <strong>Mật khẩu đã tạo:</strong> {generatedPassword}
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <Label htmlFor="confirmPassword">Xác nhận mật khẩu</Label>
+                    <Input
+                      id="confirmPassword"
+                      type="password"
+                      placeholder="Nhập lại mật khẩu mới"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Lưu ý:</strong> 
+                  </p>
+                  <ul className="text-xs text-yellow-700 mt-1 space-y-1">
+                    <li>• Người dùng sẽ cần đăng nhập lại với mật khẩu mới</li>
+                    <li>• Mật khẩu phải có ít nhất 6 ký tự</li>
+                    <li>• Hành động này sẽ được ghi log</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button 
+                    onClick={confirmChangePassword}
+                    disabled={isChangingPassword || !newPassword || !confirmPassword}
+                    className="flex-1 bg-yellow-600 hover:bg-yellow-700"
+                  >
+                    {isChangingPassword ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Đang đổi...
+                      </>
+                    ) : (
+                      <>
+                        <Key className="h-4 w-4 mr-2" />
+                        Đổi mật khẩu
+                      </>
+                    )}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowPasswordModal(false)}
+                    disabled={isChangingPassword}
+                    className="flex-1"
+                  >
+                    Hủy
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </main>

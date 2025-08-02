@@ -1,190 +1,153 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/auth-utils';
 import { getMongoDb } from '@/lib/db';
 import { ObjectId } from 'mongodb';
-import { verifyToken } from '@/lib/auth';
 
-// GET: Lấy danh sách yêu cầu nạp tiền
-export async function GET(req: NextRequest) {
-  try {
-    // Xác thực admin
-    const token = req.headers.get('authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json({ message: 'Bạn cần đăng nhập' }, { status: 401 });
-    }
+export async function GET(request: NextRequest) {
+  return requireAdmin(request, async (req, adminUser) => {
+    try {
+      const db = await getMongoDb();
+      
+      // Lấy danh sách deposits với pagination
+      const url = new URL(req.url);
+      const page = parseInt(url.searchParams.get('page') || '1');
+      const limit = parseInt(url.searchParams.get('limit') || '50');
+      const skip = (page - 1) * limit;
 
-    const tokenData = await verifyToken(token);
-    if (!tokenData?.isValid) {
-      return NextResponse.json({ message: 'Token không hợp lệ' }, { status: 401 });
-    }
-    
-    const db = await getMongoDb();
-    
-    // Kiểm tra quyền admin
-    const admin = await db.collection('users').findOne({ _id: new ObjectId(tokenData.userId) });
-    if (!admin || admin.role !== 'admin') {
-      return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
-    }
+      // Lấy tổng số deposits
+      const totalDeposits = await db.collection('deposits').countDocuments();
 
-    // Lấy danh sách yêu cầu nạp tiền
-    const deposits = await db.collection('deposits')
-      .aggregate([
-        {
-          $lookup: {
-            from: 'users',
-            localField: 'user',
-            foreignField: '_id',
-            as: 'userInfo'
-          }
-        },
-        {
-          $unwind: '$userInfo'
-        },
-        {
-          $project: {
-            _id: 1,
-            depositId: 1,
-            amount: 1,
-            status: 1,
-            proofImage: 1,
-            bankInfo: 1,
-            createdAt: 1,
-            updatedAt: 1,
-            username: '$userInfo.username',
-            userEmail: '$userInfo.email'
-          }
-        },
-        {
-          $sort: { createdAt: -1 }
+      // Lấy danh sách deposits
+      const deposits = await db.collection('deposits')
+        .find({})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      return NextResponse.json({
+        success: true,
+        deposits: deposits,
+        pagination: {
+          page,
+          limit,
+          total: totalDeposits,
+          pages: Math.ceil(totalDeposits / limit)
         }
-      ]).toArray();
+      });
 
-    return NextResponse.json({ deposits });
-  } catch (error) {
-    console.error('Error fetching deposits:', error);
-    return NextResponse.json({ message: 'Đã xảy ra lỗi khi lấy danh sách nạp tiền' }, { status: 500 });
-  }
+    } catch (error) {
+      console.error('Error loading deposits:', error);
+      return NextResponse.json(
+        { success: false, message: 'Lỗi hệ thống' },
+        { status: 500 }
+      );
+    }
+  });
 }
 
-// POST: Duyệt yêu cầu nạp tiền
-export async function POST(req: NextRequest) {
-  try {
-    // Xác thực admin
-    const token = req.headers.get('authorization')?.split(' ')[1];
-    if (!token) {
-      return NextResponse.json({ message: 'Bạn cần đăng nhập' }, { status: 401 });
-    }
+export async function PATCH(request: NextRequest) {
+  return requireAdmin(request, async (req, adminUser) => {
+    try {
+      const body = await req.json();
+      const { depositId, action } = body;
 
-    const tokenData = await verifyToken(token);
-    if (!tokenData?.isValid) {
-      return NextResponse.json({ message: 'Token không hợp lệ' }, { status: 401 });
-    }
-    
-    const db = await getMongoDb();
-    
-    // Kiểm tra quyền admin
-    const admin = await db.collection('users').findOne({ _id: new ObjectId(tokenData.userId) });
-    if (!admin || admin.role !== 'admin') {
-      return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const { depositId, action, note } = body; // action: 'approve' | 'reject'
-
-    if (!depositId || !action) {
-      return NextResponse.json({ message: 'Thiếu thông tin cần thiết' }, { status: 400 });
-    }
-
-    // Tìm yêu cầu nạp tiền
-    const deposit = await db.collection('deposits').findOne({ _id: new ObjectId(depositId) });
-    if (!deposit) {
-      return NextResponse.json({ message: 'Không tìm thấy yêu cầu nạp tiền' }, { status: 404 });
-    }
-
-    if (deposit.status !== 'CHO XU LY') {
-      return NextResponse.json({ message: 'Yêu cầu này đã được xử lý' }, { status: 400 });
-    }
-
-    if (action === 'approve') {
-      // Cập nhật trạng thái yêu cầu nạp tiền
-      await db.collection('deposits').updateOne(
-        { _id: new ObjectId(depositId) },
-        { 
-          $set: { 
-            status: 'DA DUYET',
-            approvedBy: new ObjectId(tokenData.userId),
-            approvedAt: new Date(),
-            adminNote: note || ''
-          }
-        }
-      );
-
-      // Lấy thông tin user hiện tại
-      const userData = await db.collection('users').findOne({ _id: deposit.user });
-      if (!userData) {
-        return NextResponse.json({ message: 'Không tìm thấy người dùng' }, { status: 404 });
+      if (!depositId || !action) {
+        return NextResponse.json(
+          { success: false, message: 'Thiếu thông tin' },
+          { status: 400 }
+        );
       }
 
-      // Tính balance mới
-      const userBalance = userData.balance || { available: 0, frozen: 0 };
-      const currentAvailable = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-      const newAvailableBalance = currentAvailable + deposit.amount;
+      const db = await getMongoDb();
 
-      // Cộng tiền vào tài khoản người dùng
-      await db.collection('users').updateOne(
-        { _id: deposit.user },
-        { 
-          $set: { 
-            balance: {
-              available: newAvailableBalance,
-              frozen: typeof userBalance === 'number' ? 0 : userBalance.frozen || 0
-            },
-            updatedAt: new Date()
-          }
+      // Tìm deposit
+      const deposit = await db.collection('deposits').findOne({ _id: new ObjectId(depositId) });
+      if (!deposit) {
+        return NextResponse.json(
+          { success: false, message: 'Không tìm thấy giao dịch' },
+          { status: 404 }
+        );
+      }
+
+      if (action === 'approve') {
+        // Cập nhật trạng thái deposit
+        await db.collection('deposits').updateOne(
+          { _id: new ObjectId(depositId) },
+          { $set: { status: 'completed', updatedAt: new Date() } }
+        );
+
+        // Cập nhật số dư user
+        const user = await db.collection('users').findOne({ _id: deposit.userId });
+        if (user) {
+          const currentBalance = user.balance?.available || 0;
+          const newBalance = currentBalance + deposit.amount;
+          
+          await db.collection('users').updateOne(
+            { _id: deposit.userId },
+            { 
+              $set: { 
+                'balance.available': newBalance,
+                updatedAt: new Date()
+              } 
+            }
+          );
         }
+
+        // Log hoạt động admin
+        await db.collection('admin_activities').insertOne({
+          adminId: new ObjectId(adminUser._id),
+          adminUsername: adminUser.username,
+          action: 'approve_deposit',
+          targetUserId: deposit.userId,
+          targetUsername: deposit.username,
+          amount: deposit.amount,
+          timestamp: new Date(),
+          details: `Admin duyệt nạp tiền ${deposit.amount.toLocaleString()} VND cho ${deposit.username}`
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: 'Đã duyệt nạp tiền thành công'
+        });
+
+      } else if (action === 'reject') {
+        // Cập nhật trạng thái deposit
+        await db.collection('deposits').updateOne(
+          { _id: new ObjectId(depositId) },
+          { $set: { status: 'rejected', updatedAt: new Date() } }
+        );
+
+        // Log hoạt động admin
+        await db.collection('admin_activities').insertOne({
+          adminId: new ObjectId(adminUser._id),
+          adminUsername: adminUser.username,
+          action: 'reject_deposit',
+          targetUserId: deposit.userId,
+          targetUsername: deposit.username,
+          amount: deposit.amount,
+          timestamp: new Date(),
+          details: `Admin từ chối nạp tiền ${deposit.amount.toLocaleString()} VND cho ${deposit.username}`
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: 'Đã từ chối nạp tiền'
+        });
+
+      } else {
+        return NextResponse.json(
+          { success: false, message: 'Hành động không hợp lệ' },
+          { status: 400 }
+        );
+      }
+
+    } catch (error) {
+      console.error('Error processing deposit:', error);
+      return NextResponse.json(
+        { success: false, message: 'Lỗi hệ thống' },
+        { status: 500 }
       );
-
-      // Tạo giao dịch
-      await db.collection('transactions').insertOne({
-        userId: deposit.user,
-        username: deposit.username,
-        type: 'deposit',
-        amount: deposit.amount,
-        status: 'completed',
-        note: `Nạp tiền - ${note || 'Được duyệt bởi admin'}`,
-        depositId: deposit.depositId,
-        createdAt: new Date()
-      });
-
-      return NextResponse.json({ 
-        message: 'Đã duyệt yêu cầu nạp tiền thành công',
-        depositId: depositId
-      });
-
-    } else if (action === 'reject') {
-      // Cập nhật trạng thái yêu cầu nạp tiền
-      await db.collection('deposits').updateOne(
-        { _id: new ObjectId(depositId) },
-        { 
-          $set: { 
-            status: 'TU CHOI',
-            rejectedBy: new ObjectId(tokenData.userId),
-            rejectedAt: new Date(),
-            adminNote: note || ''
-          }
-        }
-      );
-
-      return NextResponse.json({ 
-        message: 'Đã từ chối yêu cầu nạp tiền',
-        depositId: depositId
-      });
-
-    } else {
-      return NextResponse.json({ message: 'Hành động không hợp lệ' }, { status: 400 });
     }
-
-  } catch (error) {
-    console.error('Error processing deposit:', error);
-    return NextResponse.json({ message: 'Đã xảy ra lỗi khi xử lý yêu cầu nạp tiền' }, { status: 500 });
-  }
+  });
 }
