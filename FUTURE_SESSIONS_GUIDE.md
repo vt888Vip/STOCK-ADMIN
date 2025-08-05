@@ -1,13 +1,13 @@
-# Hướng dẫn Quản lý 30 Phiên Giao Dịch Tương Lai
+# Hướng dẫn Quản lý 5 Phiên Giao Dịch Tương Lai
 
 ## Tổng quan
 
-Chức năng này cho phép admin **biết trước kết quả của 30 phiên giao dịch sắp tới với độ chính xác 100%**. Kết quả admin đặt sẽ được sử dụng chính xác khi phiên kết thúc.
+Chức năng này cho phép admin **biết trước kết quả của 5 phiên giao dịch sắp tới với độ chính xác 100%**. Kết quả admin đặt sẽ được sử dụng chính xác khi phiên kết thúc.
 
 ## Tính năng chính
 
-### 1. Tự động tạo 30 phiên tương lai
-- Hệ thống tự động tạo 30 phiên giao dịch sắp tới
+### 1. Tự động tạo 5 phiên tương lai
+- Hệ thống tự động tạo 5 phiên giao dịch sắp tới
 - Mỗi phiên cách nhau 1 phút
 - Mỗi phiên kéo dài 1 phút
 - Trạng thái ban đầu: `ACTIVE` (chưa có kết quả)
@@ -19,16 +19,16 @@ Chức năng này cho phép admin **biết trước kết quả của 30 phiên 
 
 ### 3. Quản lý hàng loạt
 - Đặt kết quả cho nhiều phiên cùng lúc
-- Tạo lại 30 phiên tương lai khi cần
+- Tạo lại 5 phiên tương lai khi cần
 
 ## API Endpoints
 
 ### GET `/api/admin/session-results/future`
-Lấy danh sách 30 phiên giao dịch tương lai
+Lấy danh sách 5 phiên giao dịch tương lai
 
 **Parameters:**
 - `page`: Số trang (mặc định: 1)
-- `limit`: Số phiên mỗi trang (mặc định: 30)
+- `limit`: Số phiên mỗi trang (mặc định: 5)
 
 **Response:**
 ```json
@@ -85,7 +85,7 @@ Lấy danh sách 30 phiên giao dịch tương lai
 ```
 
 #### Action: `generate_future_sessions`
-Tạo lại 30 phiên giao dịch tương lai
+Tạo lại 5 phiên giao dịch tương lai
 
 **Body:**
 ```json
@@ -99,7 +99,7 @@ Tạo lại 30 phiên giao dịch tương lai
 ### Trang chính: `/admin/session-results/future`
 
 #### Tính năng:
-1. **Hiển thị danh sách 30 phiên tương lai**
+1. **Hiển thị danh sách 5 phiên tương lai**
    - Mã phiên
    - Thời gian bắt đầu/kết thúc
    - Thời gian còn lại đến khi bắt đầu
@@ -118,8 +118,8 @@ Tạo lại 30 phiên giao dịch tương lai
    - Chọn kết quả cho từng phiên
    - Xác nhận và lưu hàng loạt
 
-4. **Tạo lại 30 phiên**
-   - Nút "Tạo lại 30 phiên"
+4. **Tạo lại 5 phiên**
+   - Nút "Tạo lại 5 phiên"
    - Xóa phiên cũ và tạo phiên mới
 
 #### Trạng thái hiển thị:
@@ -135,8 +135,8 @@ Tạo lại 30 phiên giao dịch tương lai
 /admin/session-results/future
 ```
 
-### 2. Xem danh sách 30 phiên tương lai
-- Hệ thống tự động tạo 30 phiên nếu chưa có
+### 2. Xem danh sách 5 phiên tương lai
+- Hệ thống tự động tạo 5 phiên nếu chưa có
 - Hiển thị thời gian còn lại đến khi bắt đầu
 - Phân biệt phiên đã có kết quả và chưa có
 

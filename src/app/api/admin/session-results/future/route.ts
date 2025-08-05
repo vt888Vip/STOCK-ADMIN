@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       const futureSessions = await db.collection('trading_sessions')
         .find({
           startTime: { $gt: now },
-          status: { $in: ['ACTIVE', 'PREDICTED'] }
+          status: { $in: ['ACTIVE', 'PREDICTED', 'COMPLETED'] }
         })
         .sort({ startTime: 1 })
         .skip(skip)
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       // Đếm tổng số phiên tương lai
       const total = await db.collection('trading_sessions').countDocuments({
         startTime: { $gt: now },
-        status: { $in: ['ACTIVE', 'PREDICTED'] }
+        status: { $in: ['ACTIVE', 'PREDICTED', 'COMPLETED'] }
       });
 
       // Format sessions for frontend
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
           {
             $set: {
               result: result,
-              status: 'PREDICTED',
+              status: 'COMPLETED',
               createdBy: 'admin',
               updatedAt: new Date()
             }
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: true,
           message: `Phiên ${sessionId} kết quả được đặt: ${result}`,
-          data: { sessionId, result, status: 'PREDICTED' }
+          data: { sessionId, result, status: 'COMPLETED' }
         });
 
       } else if (action === 'bulk_set_future_results') {
@@ -160,7 +160,7 @@ export async function POST(request: NextRequest) {
               {
                 $set: {
                   result: result,
-                  status: 'PREDICTED',
+                  status: 'COMPLETED',
                   createdBy: 'admin',
                   updatedAt: new Date()
                 }
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
         });
 
       } else if (action === 'bulk_random_results') {
-        // Random kết quả hàng loạt cho nhiều phiên tương lai
+        // Random kết quả hàng loạt cho nhiều phiên tương lai với tỷ lệ 50-50
         if (!sessionIds || !Array.isArray(sessionIds)) {
           return NextResponse.json(
             { success: false, message: 'Session IDs array is required' },
@@ -185,32 +185,63 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const updateResults = [];
+        // Lọc ra các phiên ACTIVE
+        const activeSessions = [];
         for (const sessionId of sessionIds) {
           const session = await db.collection('trading_sessions').findOne({ sessionId });
           if (session && session.status === 'ACTIVE') {
-            // Generate random result (60% UP, 40% DOWN)
-            const random = Math.random();
-            const randomResult = random < 0.6 ? 'UP' : 'DOWN';
-
-            await db.collection('trading_sessions').updateOne(
-              { sessionId },
-              {
-                $set: {
-                  result: randomResult,
-                  status: 'PREDICTED',
-                  createdBy: 'system',
-                  updatedAt: new Date()
-                }
-              }
-            );
-            updateResults.push({ sessionId, result: randomResult });
+            activeSessions.push(session);
           }
+        }
+
+        if (activeSessions.length === 0) {
+          return NextResponse.json(
+            { success: false, message: 'Không có phiên nào cần tạo kết quả' },
+            { status: 400 }
+          );
+        }
+
+        // Tạo mảng kết quả cân bằng 50-50
+        const totalSessions = activeSessions.length;
+        const upCount = Math.floor(totalSessions / 2);
+        const downCount = totalSessions - upCount;
+        
+        const results = [];
+        for (let i = 0; i < upCount; i++) {
+          results.push('UP');
+        }
+        for (let i = 0; i < downCount; i++) {
+          results.push('DOWN');
+        }
+        
+        // Shuffle mảng kết quả để random
+        for (let i = results.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [results[i], results[j]] = [results[j], results[i]];
+        }
+
+        const updateResults = [];
+        for (let i = 0; i < activeSessions.length; i++) {
+          const session = activeSessions[i];
+          const result = results[i];
+
+          await db.collection('trading_sessions').updateOne(
+            { sessionId: session.sessionId },
+            {
+              $set: {
+                result: result,
+                status: 'COMPLETED',
+                createdBy: 'system',
+                updatedAt: new Date()
+              }
+            }
+          );
+          updateResults.push({ sessionId: session.sessionId, result: result });
         }
 
         return NextResponse.json({
           success: true,
-          message: `Đã random kết quả cho ${updateResults.length} phiên`,
+          message: `Đã tạo ${updateResults.length} kết quả với tỷ lệ 50-50 (UP/DOWN)`,
           data: { results: updateResults }
         });
 

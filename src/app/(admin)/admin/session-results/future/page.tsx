@@ -341,17 +341,17 @@ export default function FutureSessionsPage() {
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Quản lý 30 phiên giao dịch tương lai</h1>
-          <p className="text-gray-600 mt-2">Đặt kết quả chính xác 100% cho 30 phiên giao dịch sắp tới</p>
+          <h1 className="text-3xl font-bold text-gray-900">Quản lý 5 phiên giao dịch tương lai</h1>
+          <p className="text-gray-600 mt-2">Đặt kết quả chính xác 100% cho 5 phiên giao dịch sắp tới</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={handleGenerateFutureSessions} className="bg-blue-600 hover:bg-blue-700">
             <RefreshCw className="w-4 h-4 mr-2" />
-            Tạo lại 30 phiên
+            Tạo lại 5 phiên
           </Button>
           <Button onClick={handleBulkRandomResults} className="bg-orange-600 hover:bg-orange-700">
             <Zap className="w-4 h-4 mr-2" />
-            Random kết quả hàng loạt
+            Đặt kết quả
           </Button>
           <Button onClick={() => setShowBulkDialog(true)} className="bg-green-600 hover:bg-green-700">
             <Settings className="w-4 h-4 mr-2" />
@@ -371,7 +371,7 @@ export default function FutureSessionsPage() {
         <CardContent>
           <div className="space-y-2 text-sm">
             <p>• <strong>Độ chính xác 100%:</strong> Kết quả bạn đặt sẽ được sử dụng chính xác khi phiên kết thúc</p>
-            <p>• <strong>30 phiên tương lai:</strong> Hệ thống tự động tạo 30 phiên giao dịch sắp tới</p>
+            <p>• <strong>5 phiên tương lai:</strong> Hệ thống tự động tạo 5 phiên giao dịch sắp tới</p>
             <p>• <strong>Thời gian thực:</strong> Hiển thị thời gian còn lại đến khi phiên bắt đầu</p>
             <p>• <strong>Quản lý hàng loạt:</strong> Có thể đặt kết quả cho nhiều phiên cùng lúc</p>
           </div>
@@ -381,7 +381,7 @@ export default function FutureSessionsPage() {
       {/* Sessions Table */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Danh sách 30 phiên giao dịch tương lai</CardTitle>
+          <CardTitle className="text-lg">Danh sách 5 phiên giao dịch tương lai</CardTitle>
           <CardDescription>
             Tổng cộng {totalSessions} phiên giao dịch sắp tới
           </CardDescription>

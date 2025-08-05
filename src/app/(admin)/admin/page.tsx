@@ -4,13 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '../../../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
@@ -31,7 +31,14 @@ import {
   Target,
   Search,
   X,
-  Key
+  Key,
+  Clock,
+  TrendingUp as TrendingUpIcon,
+  TrendingDown,
+  CheckCircle,
+  Zap,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import UploadImage from '@/components/UploadImage';
 import { useToast } from '@/components/ui/use-toast';
@@ -90,6 +97,15 @@ export default function AdminDashboard() {
   const [showBankDeleteConfirm, setShowBankDeleteConfirm] = useState(false);
   const [bankToDelete, setBankToDelete] = useState<any>(null);
 
+  // Future sessions states
+  const [futureSessions, setFutureSessions] = useState<any[]>([]);
+  const [loadingFutureSessions, setLoadingFutureSessions] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [showSetResultDialog, setShowSetResultDialog] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<'UP' | 'DOWN'>('UP');
+
+
+
   // Search states
   const [searchName, setSearchName] = useState('');
   const [searchDateFrom, setSearchDateFrom] = useState('');
@@ -141,6 +157,13 @@ export default function AdminDashboard() {
       loadOrders();
     }
   }, [searchOrderUsername, searchOrderSessionId, searchOrderDate, ordersPage, activeTab]);
+
+  // Load future sessions when tab is selected
+  useEffect(() => {
+    if (activeTab === 'session-results' && isAuthenticated() && isAdmin()) {
+      loadFutureSessions();
+    }
+  }, [activeTab]);
 
   const loadOrders = async () => {
     try {
@@ -274,6 +297,161 @@ export default function AdminDashboard() {
       setLoading(false);
     }
   };
+
+  // Load future sessions
+  const loadFutureSessions = async () => {
+    try {
+      setLoadingFutureSessions(true);
+      const response = await fetch('/api/admin/session-results/future?limit=30', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFutureSessions(data.data.sessions);
+        } else {
+          setFutureSessions([]);
+        }
+      } else {
+        setFutureSessions([]);
+      }
+    } catch (error) {
+      console.error('Error loading future sessions:', error);
+      setFutureSessions([]);
+    } finally {
+      setLoadingFutureSessions(false);
+    }
+  };
+
+  // Set result for a session
+  const handleSetResult = async () => {
+    if (!selectedSession || !selectedResult) return;
+
+    try {
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'set_future_result',
+          sessionId: selectedSession.sessionId,
+          result: selectedResult
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: `Đã đặt kết quả ${selectedResult} cho phiên ${selectedSession.sessionId}`,
+        });
+        setShowSetResultDialog(false);
+        loadFutureSessions(); // Reload data
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error setting result:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể đặt kết quả',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Tạo 30 kết quả tương lai
+  const handleBulkRandomResults = async () => {
+    try {
+      toast({
+        title: 'Đang tạo...',
+        description: 'Đang tạo 30 kết quả tương lai với tỷ lệ 50-50',
+      });
+
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'bulk_random_results',
+          sessionIds: futureSessions.map(s => s.sessionId)
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công!',
+          description: `Đã tạo ${data.data.results.length} kết quả tương lai với tỷ lệ 50-50`,
+        });
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error creating future results:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tạo kết quả tương lai',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Generate new future sessions
+  const handleGenerateFutureSessions = async () => {
+    try {
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'generate_future_sessions'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: data.message,
+        });
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error generating future sessions:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tạo phiên tương lai',
+        variant: 'destructive',
+      });
+    }
+  };
+
+
 
   const handleLogout = async () => {
     await logout();
@@ -826,7 +1004,7 @@ export default function AdminDashboard() {
               }`}
             >
               <Target className="h-4 w-4 inline mr-2" />
-              Kết quả phiên giao dịch
+              Quản lý 30 giao dịch tương lai
             </button>
           </div>
         </div>
@@ -1726,41 +1904,171 @@ export default function AdminDashboard() {
         {/* Session Results Tab */}
         {activeTab === 'session-results' && (
           <div className="space-y-6">
-            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-200">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-600 rounded-lg">
-                    <Target className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</CardTitle>
-                    <p className="text-sm text-gray-600 mt-1">Đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch</p>
-                  </div>
-                </div>
+            {/* Header */}
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Quản lý 30 giao dịch tương lai</h1>
+                <p className="text-gray-600 mt-2">Đặt kết quả chính xác 100% cho 30 phiên giao dịch sắp tới</p>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleGenerateFutureSessions} className="bg-blue-600 hover:bg-blue-700">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Tạo lại 30 phiên
+                </Button>
+                <Button onClick={handleBulkRandomResults} className="bg-green-600 hover:bg-green-700">
+                  <Zap className="w-4 h-4 mr-2" />
+                  Tạo 30 kết quả tương lai
+                </Button>
+              </div>
+            </div>
+
+            {/* Info Card */}
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-blue-600" />
+                  Thông tin quan trọng
+                </CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
-                <div className="text-center py-8">
-                  <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Chức năng quản lý kết quả phiên giao dịch</h3>
-                  <p className="text-gray-500 mb-4">
-                    Tính năng này cho phép admin đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch.
-                  </p>
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <p>• Đặt kết quả thủ công (LÊN/XUỐNG) cho từng phiên</p>
-                    <p>• Tạo kết quả ngẫu nhiên cho từng phiên</p>
-                    <p>• Tạo kết quả hàng loạt cho nhiều phiên</p>
-                    <p>• Theo dõi trạng thái và kết quả của các phiên</p>
-                  </div>
-                  <div className="mt-6">
-                    <Button 
-                      onClick={() => window.open('/admin/session-results', '_blank')}
-                      className="bg-purple-600 hover:bg-purple-700"
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      Mở trang quản lý kết quả phiên giao dịch
-                    </Button>
-                  </div>
+              <CardContent>
+                <div className="space-y-2 text-sm">
+                  <p>• <strong>Độ chính xác 100%:</strong> Kết quả bạn đặt sẽ được sử dụng chính xác khi phiên kết thúc</p>
+                  <p>• <strong>30 phiên tương lai:</strong> Hệ thống tự động tạo 30 phiên giao dịch sắp tới</p>
+                  <p>• <strong>Thời gian thực:</strong> Hiển thị thời gian còn lại đến khi phiên bắt đầu</p>
+                  <p>• <strong>Quản lý hàng loạt:</strong> Có thể đặt kết quả cho nhiều phiên cùng lúc</p>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Sessions Table */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Danh sách 30 phiên giao dịch tương lai</CardTitle>
+                <CardDescription>
+                  Tổng cộng {futureSessions.length} phiên giao dịch sắp tới
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingFutureSessions ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
+                    <span className="ml-2 text-gray-600">Đang tải dữ liệu...</span>
+                  </div>
+                ) : futureSessions.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã phiên</TableHead>
+                          <TableHead>Thời gian bắt đầu</TableHead>
+                          <TableHead>Thời gian kết thúc</TableHead>
+                          <TableHead>Còn lại</TableHead>
+                          <TableHead>Trạng thái</TableHead>
+                          <TableHead>Kết quả đã đặt</TableHead>
+                          <TableHead>Người đặt</TableHead>
+                          <TableHead>Thao tác</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {futureSessions.map((session) => {
+                          const startTime = new Date(session.startTime);
+                          const endTime = new Date(session.endTime);
+                          const now = new Date();
+                          const timeUntilStart = startTime.getTime() - now.getTime();
+                          const minutesUntilStart = Math.floor(timeUntilStart / (1000 * 60));
+                          const secondsUntilStart = Math.floor((timeUntilStart % (1000 * 60)) / 1000);
+                          
+                          return (
+                            <TableRow key={session._id}>
+                              <TableCell className="font-mono text-sm">{session.sessionId}</TableCell>
+                              <TableCell>{startTime.toLocaleString('vi-VN')}</TableCell>
+                              <TableCell>{endTime.toLocaleString('vi-VN')}</TableCell>
+                              <TableCell>
+                                <span className="text-sm font-medium text-blue-600">
+                                  {minutesUntilStart > 0 ? `${minutesUntilStart} phút ` : ''}
+                                  {secondsUntilStart} giây
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {session.status === 'ACTIVE' ? (
+                                  <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Chưa có kết quả
+                                  </Badge>
+                                ) : session.status === 'COMPLETED' ? (
+                                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Đã hoàn thành
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Đã đặt kết quả
+                                  </Badge>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {session.result ? (
+                                  <Badge 
+                                    variant={session.result === 'UP' ? 'default' : 'destructive'}
+                                    className={session.result === 'UP' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}
+                                  >
+                                    {session.result === 'UP' ? (
+                                      <>
+                                        <TrendingUpIcon className="h-3 w-3 mr-1" />
+                                        LÊN
+                                      </>
+                                    ) : (
+                                      <>
+                                        <TrendingDown className="h-3 w-3 mr-1" />
+                                        XUỐNG
+                                      </>
+                                    )}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-gray-500">Chưa đặt</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">
+                                  {session.createdBy === 'admin' ? 'Admin đặt' : 'Hệ thống'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  {session.status === 'ACTIVE' && (
+                                    <Button
+                                      size="sm"
+                                      onClick={() => {
+                                        setSelectedSession(session);
+                                        setShowSetResultDialog(true);
+                                      }}
+                                      className="bg-blue-600 hover:bg-blue-700"
+                                    >
+                                      <Settings className="w-3 h-3 mr-1" />
+                                      Đặt kết quả
+                                    </Button>
+                                  )}
+                                  {(session.status === 'PREDICTED' || session.status === 'COMPLETED') && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Đã có kết quả
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600">Không có phiên giao dịch tương lai</p>
+                    <p className="text-sm text-gray-500 mt-1">Hệ thống sẽ tự động tạo phiên mới</p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -2214,6 +2522,52 @@ export default function AdminDashboard() {
             )}
           </DialogContent>
         </Dialog>
+
+        {/* Set Result Dialog */}
+        <Dialog open={showSetResultDialog} onOpenChange={setShowSetResultDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Đặt kết quả cho phiên {selectedSession?.sessionId}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Kết quả này sẽ được sử dụng chính xác 100% khi phiên kết thúc.
+              </p>
+              <div>
+                <label className="text-sm font-medium text-gray-700">Kết quả:</label>
+                <Select value={selectedResult} onValueChange={(value: 'UP' | 'DOWN') => setSelectedResult(value)}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UP">
+                      <div className="flex items-center">
+                        <TrendingUpIcon className="h-4 w-4 mr-2 text-green-600" />
+                        LÊN
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="DOWN">
+                      <div className="flex items-center">
+                        <TrendingDown className="h-4 w-4 mr-2 text-red-600" />
+                        XUỐNG
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowSetResultDialog(false)} className="flex-1">
+                Hủy
+              </Button>
+              <Button onClick={handleSetResult} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                <Settings className="w-4 h-4 mr-2" />
+                Đặt kết quả
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   );
